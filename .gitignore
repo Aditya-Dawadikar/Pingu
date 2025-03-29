@@ -1,0 +1,52 @@
+# Build artifacts
+/build/
+/CMakeFiles/
+/CMakeCache.txt
+/Makefile
+/*.cmake
+/install_manifest.txt
+
+# Conan
+/conan.lock
+/conanbuild/
+/conaninfo.txt
+
+# Executables
+/pingu
+/pingu.exe
+
+# VS Code settings (optional)
+.vscode/
+
+# Editor temp files
+*.swp
+*.swo
+*.bak
+*~
+*.tmp
+
+# Compiled object files
+*.o
+*.obj
+*.a
+*.lib
+*.so
+*.dll
+*.dylib
+
+# Logs
+*.log
+
+# JSON test artifacts (optional if not static input)
+*.json
+
+# Python cache (if using any helper scripts)
+__pycache__/
+*.pyc
+
+# Docker
+*.container-id
+*.pid
+
+# Generated files
+*.out
