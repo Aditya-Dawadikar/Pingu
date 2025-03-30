@@ -16,6 +16,41 @@ struct TestResult {
     std::stringstream log;
 };
 
+void print_help() {
+    std::cout << R"(
+    .--.
+    |o_o |
+    |:_/ |
+   //   \ \
+  (|     | )
+ /'\_   _/`\
+ \___)=(___/
+
+ PINGU - REST API Test CLI
+--------------------------------
+
+Usage:
+  pingu --test <test.json> [options]
+  pingu --test_suit <suite.json> [options]
+
+Options:
+  --test <json_file>           Run a single test case from test spec file.
+  --test_suit <json_file>      Run a full test suite with multiple cases.
+  --compact               Print diff output in compact style.
+  --parallel              Run all tests in parallel (use with --test_suit).
+  --verbosity <level>     Verbosity level (0 = minimal, 1 = default, 2 = detailed).
+  --export-log <json_file>     Export test results and logs to JSON file.
+  --help                  Show this help message.
+
+Examples:
+  pingu --test test.json --compact
+  pingu --test_suit suite.json --parallel --export-log results.json
+
+
+)";
+}
+
+
 int main(int argc, char* argv[]) {
     bool printCompact = false;
     bool isTestSuite = false;
@@ -38,6 +73,9 @@ int main(int argc, char* argv[]) {
             verbosity = std::stoi(argv[i + 1]);
         } else if (std::string(argv[i]) == "--export-log" && i + 1 < argc) {
             exportPath = argv[i + 1];
+        } else if(std::string(argv[i]) == "--help"){
+            print_help();
+            return 0;
         }
     }
 
