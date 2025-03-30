@@ -64,6 +64,39 @@ You can also customize ping behavior:
     pingu --ping https://example.com --ping-timeout 5000 --ping-retries 3
 
 ---
+## 🛠 Installation & Build Instructions
+### 📦 Prerequisites
+Make sure the following dependencies are installed:
+
+- CMake (version ≥ 3.14)
+- g++ / clang++ with C++17 support
+- libcurl development headers
+- Git
+
+On Debian/Ubuntu-based systems:
+
+```bash
+sudo apt update
+sudo apt install build-essential cmake libcurl4-openssl-dev git
+```
+### 📥 Clone the repository
+```bash
+git clone https://github.com/Aditya-Dawadikar/Pingu.git
+cd Pingu
+```
+### 🔨 Build the project
+```bash
+mkdir build
+cd build
+cmake ..
+cmake --build .
+```
+
+### ▶️ Run the CLI
+```bash
+./pingu --help
+```
+---
 
 ## 📄 Test Spec Format
 
