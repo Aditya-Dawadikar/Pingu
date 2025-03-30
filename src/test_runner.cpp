@@ -8,10 +8,17 @@
 #include <unordered_set>
 #include <string>
 #include <sstream>
+#include <chrono>
 
 namespace test_runner {
 
-bool run_test(const nlohmann::json& testSpec, const bool printCompact, int verbosity, std::stringstream& logOut) {
+    struct TestExecutionResult {
+        bool failed;
+        int api_time_ms;
+        int test_time_ms;
+    };
+
+TestExecutionResult run_test(const nlohmann::json& testSpec, const bool printCompact, int verbosity, std::stringstream& logOut) {
     std::string requestJSON = testSpec["request_description"];
     std::string responseJSON = testSpec["expected_response"];
 
@@ -28,6 +35,8 @@ bool run_test(const nlohmann::json& testSpec, const bool printCompact, int verbo
 
     bool test_failed = false;
 
+    auto test_start = std::chrono::high_resolution_clock::now();
+
     if (verbosity > 0) {
         logOut << "\n────────────────────────────────────────────────────\n";
         logOut << "[Test] \"" << testSpec["test_name"] << "\"\n";
@@ -36,7 +45,12 @@ bool run_test(const nlohmann::json& testSpec, const bool printCompact, int verbo
         }
     }
 
-    if (http_utils::make_request_from_json(request_desc, response)) {
+    auto api_start = std::chrono::high_resolution_clock::now();
+    bool api_success = http_utils::make_request_from_json(request_desc, response);
+    auto api_end = std::chrono::high_resolution_clock::now();
+    int api_time_ms = std::chrono::duration_cast<std::chrono::milliseconds>(api_end - api_start).count();
+
+    if (api_success) {
         // Redirect std::cout to logOut
         std::streambuf* original_buf = std::cout.rdbuf();
         std::cout.rdbuf(logOut.rdbuf());
@@ -55,9 +69,18 @@ bool run_test(const nlohmann::json& testSpec, const bool printCompact, int verbo
         } else {
             logOut << COLOR_GREEN << "Test \"" << testSpec["test_name"] << "\" Successful" << COLOR_RESET << "\n";
         }
+    }else {
+        test_failed = true;
+        logOut << COLOR_RED << "API Request Failed" << COLOR_RESET << "\n";
     }
 
-    return test_failed;
+    auto test_end = std::chrono::high_resolution_clock::now();
+    int test_time_ms = std::chrono::duration_cast<std::chrono::milliseconds>(test_end - test_start).count();
+
+    logOut <<COLOR_BLUE <<"\nAPI Time: " << api_time_ms << " ms\n"<<COLOR_RESET;
+    logOut <<COLOR_BLUE << "Total Test Time: " << test_time_ms << " ms\n"<<COLOR_RESET;
+
+    return { test_failed, api_time_ms, test_time_ms };
 }
 
 }

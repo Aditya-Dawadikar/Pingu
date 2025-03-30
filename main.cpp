@@ -13,6 +13,8 @@
 struct TestResult {
     std::string name;
     bool failed;
+    int api_time_ms;
+    int test_time_ms;
     std::stringstream log;
 };
 
@@ -32,30 +34,33 @@ void print_help() {
 Usage:
   pingu --test <test.json> [options]
   pingu --test_suit <suite.json> [options]
+  pingu --ping <url> [--ping-timeout <ms>] [--ping-retries <n>]
 
 Options:
-  --test <json_file>           Run a single test case from test spec file.
-  --test_suit <json_file>      Run a full test suite with multiple cases.
-  --compact               Print diff output in compact style.
-  --parallel              Run all tests in parallel (use with --test_suit).
-  --verbosity <level>     Verbosity level (0 = minimal, 1 = default, 2 = detailed).
-  --export-log <json_file>     Export test results and logs to JSON file.
-  --help                  Show this help message.
+  --test <json_file>         Run a single test case from test spec file.
+  --test_suit <json_file>    Run a full test suite with multiple cases.
+  --compact                  Print diff output in compact style.
+  --parallel                 Run all tests in parallel (use with --test_suit).
+  --verbosity <level>        Verbosity level (0 = minimal, 1 = default, 2 = detailed).
+  --export-log <json_file>   Export test results and logs to JSON file.
+  --ping <url>               Perform a quick ping test on an endpoint.
+  --ping-timeout <ms>        Timeout for ping (default: 5000 ms).
+  --ping-retries <n>         Retry count for ping (default: 1).
+  --help                     Show this help message.
 
 Examples:
   pingu --test test.json --compact
   pingu --test_suit suite.json --parallel --export-log results.json
-
-
+  pingu --ping https://httpbin.org/get --ping-retries 3
 )";
 }
-
 
 int main(int argc, char* argv[]) {
     bool printCompact = false;
     bool isTestSuite = false;
     int verbosity = 1;
     bool runInParallel = false;
+
     std::string testSpecPath;
     std::string exportPath;
     std::string pingUrl;
@@ -63,68 +68,52 @@ int main(int argc, char* argv[]) {
     int pingRetries = 1;
 
     for (int i = 1; i < argc; ++i) {
-        if (std::string(argv[i]) == "--test") {
-            testSpecPath = argv[i + 1];
-        } else if (std::string(argv[i]) == "--test_suit") {
-            isTestSuite = true;
-            testSpecPath = argv[i + 1];
-        } else if (std::string(argv[i]) == "--parallel") {
-            runInParallel = true;
-        } else if (std::string(argv[i]) == "--compact") {
-            printCompact = true;
-        } else if (std::string(argv[i]) == "--verbosity" && i + 1 < argc) {
-            verbosity = std::stoi(argv[i + 1]);
-        } else if (std::string(argv[i]) == "--export-log" && i + 1 < argc) {
-            exportPath = argv[i + 1];
-        } else if(std::string(argv[i]) == "--help"){
-            print_help();
-            return 0;
-        }else if (std::string(argv[i]) == "--ping" && i + 1 < argc) {
-            pingUrl = argv[i + 1];
-            break; // We can exit early since this is a standalone command
-        } else if (std::string(argv[i]) == "--ping-timeout" && i + 1 < argc) {
-            pingTimeoutMs = std::stoi(argv[++i]);
-        } else if (std::string(argv[i]) == "--ping-retries" && i + 1 < argc) {
-            pingRetries = std::stoi(argv[++i]);
-        }
+        std::string arg = argv[i];
+        if (arg == "--test") testSpecPath = argv[++i];
+        else if (arg == "--test_suit") { isTestSuite = true; testSpecPath = argv[++i]; }
+        else if (arg == "--parallel") runInParallel = true;
+        else if (arg == "--compact") printCompact = true;
+        else if (arg == "--verbosity" && i + 1 < argc) verbosity = std::stoi(argv[++i]);
+        else if (arg == "--export-log" && i + 1 < argc) exportPath = argv[++i];
+        else if (arg == "--help") { print_help(); return 0; }
+        else if (arg == "--ping" && i + 1 < argc) { pingUrl = argv[++i]; break; }
+        else if (arg == "--ping-timeout" && i + 1 < argc) pingTimeoutMs = std::stoi(argv[++i]);
+        else if (arg == "--ping-retries" && i + 1 < argc) pingRetries = std::stoi(argv[++i]);
     }
 
     if (!pingUrl.empty()) {
         bool success = false;
-    
+
         for (int attempt = 1; attempt <= pingRetries; ++attempt) {
             std::cout << "Pinging " << pingUrl << " (attempt " << attempt << " of " << pingRetries << ")...\n";
-    
+
             nlohmann::json response;
             nlohmann::json dummyRequest = {
                 {"method", "GET"},
                 {"url", pingUrl},
                 {"timeout", pingTimeoutMs}
             };
-    
+
             auto start = std::chrono::high_resolution_clock::now();
             success = http_utils::make_request_from_json(dummyRequest, response);
             auto end = std::chrono::high_resolution_clock::now();
-    
+
             auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
-    
+
             if (success) {
-                std::cout << "Response received in " << ms << "ms\n";
+                std::cout << "Response received in " << ms << " ms\n";
                 return 0;
             } else {
                 std::cerr << "No response. Retrying...\n";
             }
         }
-    
+
         std::cerr << "Failed to ping " << pingUrl << " after " << pingRetries << " attempts.\n";
         return 1;
     }
-        
 
     if (testSpecPath.empty()) {
-        std::cerr << "Usage: " << argv[0]
-                  << (isTestSuite ? " --test_suit <suite.json>" : " --test <test.json>")
-                  << " [--compact] [--parallel] [--verbosity <level>] [--export-log <file>]\n";
+        std::cerr << "Missing required argument: --test or --test_suit\n";
         return 1;
     }
 
@@ -151,31 +140,24 @@ int main(int argc, char* argv[]) {
         std::mutex log_mutex;
         int passed = 0, failed = 0;
 
+        auto process_test = [&](const nlohmann::json& testCase) {
+            std::stringstream ss;
+            auto result = test_runner::run_test(testCase, printCompact, verbosity, ss);
+            std::lock_guard<std::mutex> lock(log_mutex);
+            testLogs.push_back({ testCase["test_name"], result.failed, result.api_time_ms, result.test_time_ms, std::move(ss) });
+            if (result.failed) failed++;
+            else passed++;
+        };
+
         if (runInParallel) {
             std::vector<std::thread> threads;
-
             for (const auto& testCase : testSpec["test_cases"]) {
-                threads.emplace_back([&, testCase]() {
-                    std::stringstream ss;
-                    bool test_failed = test_runner::run_test(testCase, printCompact, verbosity, ss);
-
-                    std::lock_guard<std::mutex> lock(log_mutex);
-                    testLogs.push_back({ testCase["test_name"], test_failed, std::move(ss) });
-                    if (test_failed) failed++;
-                    else passed++;
-                });
+                threads.emplace_back(process_test, testCase);
             }
-
-            for (auto& t : threads) {
-                if (t.joinable()) t.join();
-            }
+            for (auto& t : threads) if (t.joinable()) t.join();
         } else {
             for (const auto& testCase : testSpec["test_cases"]) {
-                std::stringstream ss;
-                bool test_failed = test_runner::run_test(testCase, printCompact, verbosity, ss);
-                testLogs.push_back({ testCase["test_name"], test_failed, std::move(ss) });
-                if (test_failed) failed++;
-                else passed++;
+                process_test(testCase);
             }
         }
 
@@ -194,6 +176,8 @@ int main(int argc, char* argv[]) {
                 exportJson["results"].push_back({
                     { "test_name", result.name },
                     { "status", result.failed ? "failed" : "passed" },
+                    { "api_time_ms", result.api_time_ms },
+                    { "test_time_ms", result.test_time_ms },
                     { "log", result.log.str() }
                 });
             }
@@ -209,18 +193,19 @@ int main(int argc, char* argv[]) {
 
     } else {
         std::stringstream ss;
-        bool test_failed = test_runner::run_test(testSpec, printCompact, verbosity, ss);
+        auto result = test_runner::run_test(testSpec, printCompact, verbosity, ss);
         std::cout << ss.str();
-        std::cout << (test_failed ? "Test Failed\n" : "Test Passed\n");
+        std::cout << (result.failed ? "Test Failed\n" : "Test Passed\n");
 
         if (!exportPath.empty()) {
             nlohmann::json exportJson;
-            exportJson["results"] = nlohmann::json::array();
-            exportJson["results"].push_back({
+            exportJson["results"] = {{
                 { "test_name", testSpec["test_name"] },
-                { "status", test_failed ? "failed" : "passed" },
+                { "status", result.failed ? "failed" : "passed" },
+                { "api_time_ms", result.api_time_ms },
+                { "test_time_ms", result.test_time_ms },
                 { "log", ss.str() }
-            });
+            }};
 
             std::ofstream outFile(exportPath);
             if (outFile.is_open()) {
