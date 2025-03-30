@@ -2,6 +2,8 @@
 
 **Pingu** is a lightweight and developer-friendly CLI tool to test REST APIs and validate JSON responses with detailed diff output and support for parallel execution.
 
+✨ Pingu = Ping + U (Unit Testing)
+
 ---
 
 ## 🔧 Features
