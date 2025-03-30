@@ -58,6 +58,9 @@ int main(int argc, char* argv[]) {
     bool runInParallel = false;
     std::string testSpecPath;
     std::string exportPath;
+    std::string pingUrl;
+    int pingTimeoutMs = 5000;
+    int pingRetries = 1;
 
     for (int i = 1; i < argc; ++i) {
         if (std::string(argv[i]) == "--test") {
@@ -76,8 +79,47 @@ int main(int argc, char* argv[]) {
         } else if(std::string(argv[i]) == "--help"){
             print_help();
             return 0;
+        }else if (std::string(argv[i]) == "--ping" && i + 1 < argc) {
+            pingUrl = argv[i + 1];
+            break; // We can exit early since this is a standalone command
+        } else if (std::string(argv[i]) == "--ping-timeout" && i + 1 < argc) {
+            pingTimeoutMs = std::stoi(argv[++i]);
+        } else if (std::string(argv[i]) == "--ping-retries" && i + 1 < argc) {
+            pingRetries = std::stoi(argv[++i]);
         }
     }
+
+    if (!pingUrl.empty()) {
+        bool success = false;
+    
+        for (int attempt = 1; attempt <= pingRetries; ++attempt) {
+            std::cout << "Pinging " << pingUrl << " (attempt " << attempt << " of " << pingRetries << ")...\n";
+    
+            nlohmann::json response;
+            nlohmann::json dummyRequest = {
+                {"method", "GET"},
+                {"url", pingUrl},
+                {"timeout", pingTimeoutMs}
+            };
+    
+            auto start = std::chrono::high_resolution_clock::now();
+            success = http_utils::make_request_from_json(dummyRequest, response);
+            auto end = std::chrono::high_resolution_clock::now();
+    
+            auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
+    
+            if (success) {
+                std::cout << "Response received in " << ms << "ms\n";
+                return 0;
+            } else {
+                std::cerr << "No response. Retrying...\n";
+            }
+        }
+    
+        std::cerr << "Failed to ping " << pingUrl << " after " << pingRetries << " attempts.\n";
+        return 1;
+    }
+        
 
     if (testSpecPath.empty()) {
         std::cerr << "Usage: " << argv[0]
