@@ -4,6 +4,7 @@
 #include <thread>
 #include <mutex>
 #include <sstream>
+#include <fstream>
 
 #include "json_utils.hpp"
 #include "http_utils.hpp"
@@ -21,6 +22,7 @@ int main(int argc, char* argv[]) {
     int verbosity = 1;
     bool runInParallel = false;
     std::string testSpecPath;
+    std::string exportPath;
 
     for (int i = 1; i < argc; ++i) {
         if (std::string(argv[i]) == "--test") {
@@ -34,13 +36,15 @@ int main(int argc, char* argv[]) {
             printCompact = true;
         } else if (std::string(argv[i]) == "--verbosity" && i + 1 < argc) {
             verbosity = std::stoi(argv[i + 1]);
+        } else if (std::string(argv[i]) == "--export-log" && i + 1 < argc) {
+            exportPath = argv[i + 1];
         }
     }
 
     if (testSpecPath.empty()) {
         std::cerr << "Usage: " << argv[0]
                   << (isTestSuite ? " --test_suit <suite.json>" : " --test <test.json>")
-                  << " [--compact] [--parallel] [--verbosity <level>]\n";
+                  << " [--compact] [--parallel] [--verbosity <level>] [--export-log <file>]\n";
         return 1;
     }
 
@@ -95,17 +99,57 @@ int main(int argc, char* argv[]) {
             }
         }
 
-        // Print collected logs
         for (const auto& result : testLogs) {
             std::cout << result.log.str();
         }
 
         std::cout << "\nPassed: " << passed << " | Failed: " << failed << "\n";
+
+        if (!exportPath.empty()) {
+            nlohmann::json exportJson;
+            exportJson["test_suite_name"] = testSpec["test_suit_name"];
+            exportJson["results"] = nlohmann::json::array();
+
+            for (const auto& result : testLogs) {
+                exportJson["results"].push_back({
+                    { "test_name", result.name },
+                    { "status", result.failed ? "failed" : "passed" },
+                    { "log", result.log.str() }
+                });
+            }
+
+            std::ofstream outFile(exportPath);
+            if (outFile.is_open()) {
+                outFile << exportJson.dump(2);
+                std::cout << "\nExported logs to " << exportPath << "\n";
+            } else {
+                std::cerr << "Failed to write logs to " << exportPath << "\n";
+            }
+        }
+
     } else {
         std::stringstream ss;
-        bool failed = test_runner::run_test(testSpec, printCompact, verbosity, ss);
+        bool test_failed = test_runner::run_test(testSpec, printCompact, verbosity, ss);
         std::cout << ss.str();
-        std::cout << (failed ? "Test Failed\n" : "Test Passed\n");
+        std::cout << (test_failed ? "Test Failed\n" : "Test Passed\n");
+
+        if (!exportPath.empty()) {
+            nlohmann::json exportJson;
+            exportJson["results"] = nlohmann::json::array();
+            exportJson["results"].push_back({
+                { "test_name", testSpec["test_name"] },
+                { "status", test_failed ? "failed" : "passed" },
+                { "log", ss.str() }
+            });
+
+            std::ofstream outFile(exportPath);
+            if (outFile.is_open()) {
+                outFile << exportJson.dump(2);
+                std::cout << "\nExported logs to " << exportPath << "\n";
+            } else {
+                std::cerr << "Failed to write logs to " << exportPath << "\n";
+            }
+        }
     }
 
     return 0;
