@@ -13,17 +13,20 @@ bool write_json(const std::string &path, const nlohmann::json &data);
 
 bool diff_json(const nlohmann::json &expected, const nlohmann::json &actual,
                const std::string &path,
-               const std::unordered_set<std::string> &ignore, int indent,
+               const std::unordered_set<std::string> &ignore,
+               const std::unordered_set<std::string> &watch, int indent,
                int level);
 
 bool diff_json_compact(const nlohmann::json &expected,
                        const nlohmann::json &actual, const std::string &path,
-                       const std::unordered_set<std::string> &ignore);
+                       const std::unordered_set<std::string> &ignore,
+                       const std::unordered_set<std::string> &watch);
 
 bool diff_json_collect(const nlohmann::json &expected,
                        const nlohmann::json &actual, std::stringstream &output,
                        const std::string &path,
                        const std::unordered_set<std::string> &ignore,
+                       const std::unordered_set<std::string> &watch,
                        int indent, int level);
 
 } // namespace json_utils

@@ -34,6 +34,7 @@ bool diff_json_collect(const nlohmann::json &expected,
                        const nlohmann::json &actual, std::stringstream &output,
                        const std::string &path,
                        const std::unordered_set<std::string> &ignore,
+                       const std::unordered_set<std::string> &watch,
                        int indent, int level) {
   std::set<std::string> keys;
   if (expected.is_object()) {
@@ -51,6 +52,19 @@ bool diff_json_collect(const nlohmann::json &expected,
   for (const auto &key : keys) {
     std::string fullpath = path.empty() ? key : path + "." + key;
     if (ignore.find(fullpath) != ignore.end())
+      continue;
+    
+    // Watch path check
+    bool isWatched = watch.empty();  // Allow all if watch list is empty
+    if (!isWatched) {
+      for (const auto &w : watch) {
+        if (w.rfind(fullpath, 0) == 0) { // watch path starts with fullpath
+          isWatched = true;
+          break;
+        }
+      }
+    }
+    if (!isWatched)
       continue;
 
     bool inExpected = expected.contains(key);
@@ -76,7 +90,7 @@ bool diff_json_collect(const nlohmann::json &expected,
     if (eVal.is_object() && aVal.is_object()) {
       std::stringstream nested;
       bool nestedDiff = diff_json_collect(eVal, aVal, nested, fullpath, ignore,
-                                          indent, level + 1);
+                                          watch, indent, level + 1);
       if (nestedDiff) {
         hasDifference = true;
         output << pad << std::string(indent, ' ') << "\"" << key << "\": {\n"
@@ -103,11 +117,12 @@ bool diff_json_collect(const nlohmann::json &expected,
 // Public wrapper that prints the collected diff
 bool diff_json(const nlohmann::json &expected, const nlohmann::json &actual,
                const std::string &path,
-               const std::unordered_set<std::string> &ignore, int indent,
+               const std::unordered_set<std::string> &ignore, 
+               const std::unordered_set<std::string> &watch, int indent,
                int level) {
   std::stringstream finalOutput;
   bool hasDiff = diff_json_collect(expected, actual, finalOutput, path, ignore,
-                                   indent, level);
+                                   watch, indent, level);
   if (hasDiff) {
     std::string pad(level * indent, ' ');
     std::cout << pad << "{\n" << finalOutput.str() << pad << "}";
@@ -122,7 +137,8 @@ bool diff_json(const nlohmann::json &expected, const nlohmann::json &actual,
 // Compact diff that logs line-by-line for simple structure
 bool diff_json_compact(const nlohmann::json &expected,
                        const nlohmann::json &actual, const std::string &path,
-                       const std::unordered_set<std::string> &ignore) {
+                       const std::unordered_set<std::string> &ignore,
+                       const std::unordered_set<std::string> &watch) {
   std::set<std::string> keys;
   if (expected.is_object()) {
     for (auto &[k, _] : expected.items())
@@ -139,6 +155,19 @@ bool diff_json_compact(const nlohmann::json &expected,
     std::string fullpath = path.empty() ? key : path + "." + key;
     if (ignore.find(fullpath) != ignore.end())
       continue;
+    
+    // Watch path check
+    bool isWatched = watch.empty();  // Allow all if watch list is empty
+    if (!isWatched) {
+      for (const auto &w : watch) {
+        if (w.rfind(fullpath, 0) == 0) { // watch path starts with fullpath
+          isWatched = true;
+          break;
+        }
+      }
+    }
+    if (!isWatched)
+      continue;
 
     bool inExpected = expected.contains(key);
     bool inActual = actual.contains(key);
@@ -147,7 +176,7 @@ bool diff_json_compact(const nlohmann::json &expected,
     const auto &aVal = inActual ? actual.at(key) : nlohmann::json();
 
     if (inExpected && inActual && eVal.is_object() && aVal.is_object()) {
-      if (diff_json_compact(eVal, aVal, fullpath, ignore)) {
+      if (diff_json_compact(eVal, aVal, fullpath, ignore, watch)) {
         hasDifference = true;
       }
     } else if (inExpected && !inActual) {

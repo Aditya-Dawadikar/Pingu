@@ -35,6 +35,13 @@ TestExecutionResult run_test(const nlohmann::json &testSpec,
     }
   }
 
+  std::unordered_set<std::string> watchKeys;
+  if (testSpec.contains("watch") && testSpec["watch"].is_array()) {
+    for (const auto &item : testSpec["watch"]) {
+      watchKeys.insert(item.get<std::string>());
+    }
+  }
+
   bool test_failed = false;
 
   auto test_start = std::chrono::high_resolution_clock::now();
@@ -61,10 +68,10 @@ TestExecutionResult run_test(const nlohmann::json &testSpec,
 
     if (printCompact) {
       test_failed = json_utils::diff_json_compact(expected_response, response,
-                                                  "", ignoreKeys);
+                                                  "", ignoreKeys, watchKeys);
     } else {
       test_failed = json_utils::diff_json(expected_response, response, "",
-                                          ignoreKeys, 2, 0);
+                                          ignoreKeys, watchKeys, 2, 0);
     }
 
     // Restore std::cout
