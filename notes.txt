@@ -8,4 +8,7 @@ apt-get install -y cmake
 mkdir build && cd build
 cmake ..
 cmake --build .
-./pingu
+./pingu 
+
+// Lint
+find src include tests -type f -regex '.*\.\(cpp\|hpp\|cc\|cxx\|h\)' -exec clang-format -i {} \;
